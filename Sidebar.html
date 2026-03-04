@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <base target="_top">
+  <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 15px;
+    }
+
+    .block {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 5px;
+      color: #333;
+    }
+
+    input,
+    select {
+      width: 100%;
+      padding: 8px;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+    .button-row {
+      margin-top: 25px;
+    }
+
+    #status {
+      margin-top: 15px;
+      font-size: 13px;
+      color: #555;
+    }
+
+    .spinner {
+      display: none;
+      width: 16px;
+      height: 16px;
+      margin-right: 5px;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+
+<body>
+  <h3>Report Settings</h3>
+
+  <div class="block">
+    <label for="accountDropdown">Ad Account</label>
+    <select id="accountDropdown" onchange="toggleNewAccountInput()">
+      <option value="">Loading saved accounts...</option>
+    </select>
+
+    <div id="newAccountContainer" style="display:none; margin-top: 10px;">
+      <label for="accountId" style="font-size: 12px; font-weight: normal; margin-bottom: 2px;">New Account ID</label>
+      <input type="text" id="accountId" placeholder="e.g. 1234567890" />
+      <div style="font-size: 11px; color: #888; margin-top: 3px;">Enter ID (with or without 'act_' prefix)</div>
+    </div>
+  </div>
+
+  <div class="block">
+    <label for="datePreset">Date Range Preset</label>
+    <select id="datePreset">
+      <option value="today">Today</option>
+      <option value="yesterday">Yesterday</option>
+      <option value="this_month">This Month</option>
+      <option value="last_month">Last Month</option>
+      <option value="this_quarter">This Quarter</option>
+      <option value="maximum" selected>Maximum (All Time)</option>
+      <option value="data_maximum">Data Maximum</option>
+      <option value="last_3d">Last 3 Days</option>
+      <option value="last_7d">Last 7 Days</option>
+      <option value="last_14d">Last 14 Days</option>
+      <option value="last_28d">Last 28 Days</option>
+      <option value="last_30d">Last 30 Days</option>
+      <option value="last_90d">Last 90 Days</option>
+      <option value="last_week_mon_sun">Last Week (Mon-Sun)</option>
+      <option value="last_week_sun_sat">Last Week (Sun-Sat)</option>
+      <option value="last_quarter">Last Quarter</option>
+      <option value="last_year">Last Year</option>
+      <option value="this_week_mon_today">This Week (Mon-Today)</option>
+      <option value="this_week_sun_today">This Week (Sun-Today)</option>
+      <option value="this_year">This Year</option>
+    </select>
+  </div>
+
+  <div class="block">
+    <label for="timeIncrement">Time Breakdown</label>
+    <select id="timeIncrement">
+      <option value="none" selected>Lifetime (No Breakdown)</option>
+      <option value="1">Daily</option>
+    </select>
+  </div>
+
+  <div class="block"
+    style="font-size: 12px; color: gray; background: #f9f9f9; padding: 10px; border-radius: 4px; border: 1px solid #eee;">
+    <strong>Fields:</strong> Ad, Adset, Campaign names & IDs, Spend, Impressions, Clicks, Video Actions, Purchases,
+    ROAS.
+  </div>
+
+  <div class="button-row">
+    <button class="action" id="runBtn" onclick="generateReport()">Generate Report</button>
+  </div>
+
+  <div id="status"></div>
+
+  <script>
+    // Automatically load saved accounts when sidebar opens
+    document.addEventListener('DOMContentLoaded', function () {
+      google.script.run
+        .withSuccessHandler(populateAccounts)
+        .withFailureHandler(function (e) { document.getElementById('status').innerText = 'Failed to load accounts: ' + e; })
+        .getSavedAccounts();
+    });
+
+    function populateAccounts(accounts) {
+      var dropdown = document.getElementById('accountDropdown');
+      dropdown.innerHTML = ''; // Clear loading message
+
+      if (accounts && accounts.length > 0) {
+        dropdown.add(new Option('-- Select Saved Account --', ''));
+        for (var i = 0; i < accounts.length; i++) {
+          // Example label: "My Business Account (12345678)"
+          dropdown.add(new Option(accounts[i].name + ' (' + accounts[i].id + ')', accounts[i].id));
+        }
+      } else {
+        dropdown.add(new Option('-- No Saved Accounts Yet --', ''));
+      }
+
+      dropdown.add(new Option('+ Enter New Account ID...', 'new'));
+
+      // If there are no saved accounts, default to the "Add New" state
+      if (!accounts || accounts.length === 0) {
+        dropdown.value = 'new';
+      }
+
+      toggleNewAccountInput();
+    }
+
+    function toggleNewAccountInput() {
+      var dropdown = document.getElementById('accountDropdown');
+      var container = document.getElementById('newAccountContainer');
+      container.style.display = (dropdown.value === 'new') ? 'block' : 'none';
+    }
+
+    function generateReport() {
+      var dropdownVal = document.getElementById('accountDropdown').value;
+      var enteredId = document.getElementById('accountId').value;
+      var accountId = (dropdownVal === 'new') ? enteredId : dropdownVal;
+
+      var datePreset = document.getElementById('datePreset').value;
+      var timeIncrement = document.getElementById('timeIncrement').value;
+      var btn = document.getElementById('runBtn');
+      var status = document.getElementById('status');
+
+      if (!accountId) {
+        status.innerHTML = '<span style="color:red">Error: Ad Account ID is required.</span>';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = 'Running...';
+      status.innerHTML = 'Fetching data from Facebook API...';
+
+      var config = {
+        accountId: accountId,
+        datePreset: datePreset,
+        timeIncrement: timeIncrement
+      };
+
+      google.script.run
+        .withSuccessHandler(function (response) {
+          btn.disabled = false;
+          btn.innerHTML = 'Generate Report';
+          status.innerHTML = '<span style="color:green">' + response.message + '</span>';
+          // Automatically refresh the dropdown so the newly used account appears immediately
+          google.script.run.withSuccessHandler(populateAccounts).getSavedAccounts();
+        })
+        .withFailureHandler(function (error) {
+          btn.disabled = false;
+          btn.innerHTML = 'Generate Report';
+          status.innerHTML = '<span style="color:red">' + error.message + '</span>';
+        })
+        .runReport(config);
+    }
+  </script>
+</body>
+
+</html>
